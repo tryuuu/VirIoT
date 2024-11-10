@@ -15,14 +15,17 @@ class WebSocketClient(Thread):
         self.sio = socketio.Client()
         #self.sio = socketio.AsyncClient()
 
-    def setCallback(self, subscriptionId, callback):        
+    def setCallback(self, subscriptionId, callback):
+        # ロックを取得(別のスレッドがcbListやsubscriptionsにアクセスできないようにする)        
         self.lock.acquire()
+        # 後でサブスクリプションIDに対応するコールバックを呼び出せる
         self.cbList[subscriptionId] = callback        
         self.subscriptions.append(subscriptionId)
         if self.connected == True:
             self.sio.emit('subscriptions', self.subscriptions)     
             
         self.subscriptions = []
+        # ロックの解放
         self.lock.release()
         
     def onConnect(self):            

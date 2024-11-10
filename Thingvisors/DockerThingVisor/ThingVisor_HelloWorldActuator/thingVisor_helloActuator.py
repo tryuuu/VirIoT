@@ -55,6 +55,7 @@ class DataThread(Thread):
         if "cmd-nuri" in cmd_info:
             if cmd_info['cmd-nuri'].startswith("viriot://"):
                 topic = cmd_info['cmd-nuri'][len("viriot://"):]
+                # subscriberはvsilo(vthing/<id>/data_out)
                 self.publish(message, topic)
             else:
                 self.publish(message)
@@ -212,14 +213,14 @@ class DataThread(Thread):
         # define callback and subscriptions for data_in where to receive actuator commands
         mqtt_data_client.message_callback_add(v_thing_topic + "/" + data_in_suffix,
                                               self.on_message_data_in_vThing)
+        # publisher:vsilo                                    
         mqtt_data_client.subscribe(
             v_thing_topic + "/" + data_in_suffix)
         mqtt_data_client.loop_forever()
         print("Thread '" + self.name + "' terminated")
 
-
 class ControlThread(Thread):
-
+    # publisher: thingvisor, subscriber: vsilo
     def on_message_get_thing_context(self, jres):
         silo_id = jres["vSiloID"]
         message = {"command": "getContextResponse", "data": LampActuatorContext.get_all(), "meta": {
@@ -227,6 +228,7 @@ class ControlThread(Thread):
         mqtt_control_client.publish(v_silo_prefix + "/" + silo_id +
                                     "/" + control_in_suffix, json.dumps(message))
 
+    # publisher: tgingvisor, subscriber: master controller,vsilo
     def send_destroy_v_thing_message(self):
         msg = {"command": "deleteVThing",
                "vThingID": v_thing_ID, "vSiloID": "ALL"}
@@ -234,6 +236,7 @@ class ControlThread(Thread):
             v_thing_prefix + "/" + v_thing_ID + "/" + control_out_suffix, json.dumps(msg))
         return
 
+    # publisher: thingvisor, subscriber: master controller
     def send_destroy_thing_visor_ack_message(self):
         msg = {"command": "destroyTVAck", "thingVisorID": thing_visor_ID}
         mqtt_control_client.publish(

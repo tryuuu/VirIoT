@@ -48,6 +48,7 @@ def run(args):
     }
 
     response = requests.request("POST", url, data=payload, headers=headers)
+    print(response)
 
     if response.status_code in [201, 200]:
         printj(response.text)

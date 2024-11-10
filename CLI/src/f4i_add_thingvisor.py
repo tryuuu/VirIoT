@@ -73,7 +73,7 @@ def run(args):
                "debug_mode": False if args.debug_mode == "false" else True,
                "tvZone": args.tvZone,
                "yamlFiles": yaml_list}
-
+    print(payload)
     pprint(payload)
     token = get_token()
     if not token:
@@ -86,7 +86,9 @@ def run(args):
         }
 
     response = requests.request("POST", url, data=json.dumps(payload), headers=headers)
-    print(response.json().get('message')+"\n")
+    print(response.json())  # APIからの全レスポンスを出力
+    print(response.json().get('message', 'No message provided') + "\n")  # 'message'キーがない場合のデフォルトメッセージを設定
+
 
 
 if __name__ == '__main__':

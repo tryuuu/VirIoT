@@ -68,7 +68,7 @@ class MqttControlThread(Thread):
     # -------- interfaces for virtual things ------------
 
     # create virtual things
-    def createVThing(v_thing_ID, v_thing):
+    def createVThing(self,v_thing_ID, v_thing):
         global thing_visor_ID
 
         # Publish on the thingVisor out_control topic the createVThing command and other parameters

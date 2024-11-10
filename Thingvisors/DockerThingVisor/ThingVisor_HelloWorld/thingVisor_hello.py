@@ -57,6 +57,7 @@ class FetcherThread(Thread):
             # neutral-format {"data":<NGSI-LD Entity Array>, "meta": {"vThingID":<v_thing_ID>}}
             # vThingID is mandatory, making possible to identify the vThingID without exploiting the data_out topic name
 
+            # 定期的にカウンターをインクリメントし、新しいデータを生成する
             ngsiLdEntity1 = {"id": "urn:ngsi-ld:HelloSensor1",
                              "type": "my-counter",
                              "counter": {"type": "Property", "value": self.c}}
@@ -165,6 +166,7 @@ class MqttControlThread(Thread):
             traceback.print_exc()
         return 'invalid command'
 
+    # MQTT制御ブローカーに接続し、制御メッセージを受信して処理するためのループを実行
     def run(self):
         print("Thread mqtt control started")
         global mqtt_control_client
@@ -193,7 +195,8 @@ class MqttControlThread(Thread):
 if __name__ == '__main__':
     MAX_RETRY = 3
     # v_thing_ID = os.environ["vThingID_0"]
-    thing_visor_ID = os.environ["thingVisorID"]
+    # thing_visor_ID = os.environ["thingVisorID"]
+    thing_visor_ID = "hello_test"
     v_thing_ID = thing_visor_ID + "/" + "hello"
     v_thing_label = "helloWorld"
     v_thing_description = "hello world virtual thing"
@@ -205,11 +208,17 @@ if __name__ == '__main__':
     time.sleep(1.5)  # wait before query the system database
     db_name = "viriotDB"  # name of system database
     thing_visor_collection = "thingVisorC"
-    db_IP = os.environ['systemDatabaseIP']  # IP address of system database
-    db_port = os.environ['systemDatabasePort']  # port of system database
-    db_client = MongoClient('mongodb://' + db_IP + ':' + str(db_port) + '/')
-    db = db_client[db_name]
-    tv_entry = db[thing_visor_collection].find_one({"thingVisorID": thing_visor_ID})
+    # db_IP = os.environ['systemDatabaseIP']  # IP address of system database
+    # db_port = os.environ['systemDatabasePort']  # port of system database
+    # db_client = MongoClient('mongodb://' + db_IP + ':' + str(db_port) + '/')
+    # db = db_client[db_name]
+    # tv_entry = db[thing_visor_collection].find_one({"thingVisorID": thing_visor_ID})
+    tv_entry = {
+        "thingVisorID": thing_visor_ID,
+        "MQTTDataBroker": {"ip": "192.168.80.240", "port": 30000},
+        "MQTTControlBroker": {"ip": "192.168.80.240", "port": 30000},
+        "params": '{"rate": 5}'
+    }
 
     valid_tv_entry = False
     for x in range(MAX_RETRY):
@@ -223,11 +232,16 @@ if __name__ == '__main__':
         exit()
 
     try:
-        # import paramenters from DB
-        MQTT_data_broker_IP = tv_entry["MQTTDataBroker"]["ip"]
-        MQTT_data_broker_port = int(tv_entry["MQTTDataBroker"]["port"])
-        MQTT_control_broker_IP = tv_entry["MQTTControlBroker"]["ip"]
-        MQTT_control_broker_port = int(tv_entry["MQTTControlBroker"]["port"])
+        # MongoDBからMQTTブローカーのIPアドレスとポートを取得
+        #MQTT_data_broker_IP = tv_entry["MQTTDataBroker"]["ip"]
+        #MQTT_data_broker_port = int(tv_entry["MQTTDataBroker"]["port"])
+        #MQTT_control_broker_IP = tv_entry["MQTTControlBroker"]["ip"]
+        #MQTT_control_broker_port = int(tv_entry["MQTTControlBroker"]["port"])
+
+        MQTT_data_broker_IP = "192.168.80.240"
+        MQTT_data_broker_port = 30000
+        MQTT_control_broker_IP = "192.168.80.240"
+        MQTT_control_broker_port = 30000
 
         parameters = tv_entry["params"]
         if parameters:
@@ -256,9 +270,6 @@ if __name__ == '__main__':
     out_control_suffix = "c_out"
     v_silo_prefix = "vSilo"
 
-    port_mapping = db[thing_visor_collection].find_one({"thingVisorID": thing_visor_ID}, {"port": 1, "_id": 0})
-    print("port mapping: " + str(port_mapping))
-
     mqtt_control_client = mqtt.Client()
     mqtt_data_client = mqtt.Client()
 
@@ -273,7 +284,10 @@ if __name__ == '__main__':
             sleep_time = 5
     else:
         sleep_time = 5
+    
+    ## 3つのスレッドを並行して実行することで、タスクを非同期に処理
 
+    # 仮想センサーのデータを定期的に収集し、MQTTブローカーに公開する
     data_thread = FetcherThread(sleep_time)  # Thread used to fetch data
     data_thread.start()
 

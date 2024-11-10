@@ -1,6 +1,14 @@
 #!/bin/bash
 
-/usr/bin/screen -S hypervisor -s /bin/bash -t win0 -A -d -m
-screen -S hypervisor -p win0 -X stuff $'/usr/local/bin/python3 /app/thingVisor_weather.py \n'
+# 環境変数の設定
+export thingVisorID=my_thing_visor_id
+export systemDatabaseIP=mongo
+export systemDatabasePort=27017
 
+
+echo "Starting Python script"
+/usr/local/bin/python3 /app/thingVisor_weather.py
+echo "Python script finished"
+
+# 無限に待機
 sleep infinity

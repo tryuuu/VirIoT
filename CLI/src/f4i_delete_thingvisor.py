@@ -55,6 +55,7 @@ def run(args):
     }
 
     response = requests.request("POST", url, data=payload, headers=headers)
+    print(response.json() )
     print(response.json().get('message') + "\n")
 
 

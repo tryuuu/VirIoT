@@ -1,19 +1,47 @@
-apiVersion: apps/v1 # for versions before 1.9.0 use apps/v1beta2
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: f4i-tv-helloworld
+  labels:
+    app: f4i-helloworld # Deploymentのラベル
 spec:
+  replicas: 1
   selector:
     matchLabels:
       app: f4i-helloworld
-  replicas: 1
   template:
     metadata:
       labels:
-        app: f4i-helloworld
+        app: f4i-helloworld # Podのラベル
     spec:
+      initContainers: 
+      - name: init-sidecar
+        image: tryuu/thingvisor_helloworld_sidecar:hello
+        imagePullPolicy: Always
+        volumeMounts:
+        - name: shared-data
+          mountPath: /app/data
+
       containers:
-      - name: f4i-helloworld
-        image: fed4iot/helloworld-tv:2.3
-        ports:
-        - containerPort: 80 
+      - name: main
+        image: tryuu/thingvisor_helloworld_main:hello
+        imagePullPolicy: Always
+        volumeMounts:
+        - name: shared-data
+          mountPath: /app/data
+
+      - name: sidecar-container
+        image: tryuu/thingvisor_helloworld_sidecar:hello
+        imagePullPolicy: Always
+        volumeMounts:
+        - name: shared-data
+          mountPath: /app/data
+        command: ["/bin/sh", "-c"]
+        # sidecarが終了しないように
+        args:
+          - |
+            while true; do sleep 3600; done
+
+      volumes:
+      - name: shared-data
+        emptyDir: {}

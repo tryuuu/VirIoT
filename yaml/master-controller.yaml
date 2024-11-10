@@ -27,8 +27,8 @@ spec:
                 - "default"
       containers:
       - name: f4i-master-controller
-        #image: fed4iot/master-controller:latest
-        image: tryuu/my-viriot-master-controller:latest
+        image: fed4iot/master-controller:latest
+        #image: tryuu/my-viriot-master-controller:latest
         ports:
         - containerPort: 8090
         volumeMounts:

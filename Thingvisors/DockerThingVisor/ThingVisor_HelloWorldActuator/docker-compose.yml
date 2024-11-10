@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  mongo:
+    image: mongo:4.4
+    container_name: mongo
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: viriotDB
+    volumes:
+      - mongo_data:/data/db
+
+  mqtt:
+    image: eclipse-mosquitto:latest
+    container_name: mqtt
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
+
+  sidecar:
+    build:
+      context: ./sidecar
+    container_name: sidecar
+    environment:
+      thingVisorID: "myThingVisor1"
+      systemDatabaseIP: "mongo"
+      systemDatabasePort: "27017"
+    volumes:
+      - shared_data:/app/data
+    depends_on:
+      - mongo
+
+  thingvisor:
+    build:
+      context: ./main
+    container_name: main
+    volumes:
+      - shared_data:/app/data
+    depends_on:
+      - mongo
+      - mqtt
+      - sidecar
+
+volumes:
+  mongo_data:
+  shared_data:
