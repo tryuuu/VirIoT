@@ -18,16 +18,22 @@ out_control_suffix = "c_out"
 v_silo_prefix = "vSilo"
 thing_visor_collection = "thingVisorC"
 
-db_IP = os.environ['systemDatabaseIP']
-db_port = os.environ['systemDatabasePort']
-db_name = "viriotDB"
-db_client = MongoClient(f'mongodb://{db_IP}:{db_port}/')
-db = db_client[db_name]
+# db_IP = os.environ['systemDatabaseIP']
+# db_port = os.environ['systemDatabasePort']
+# db_name = "viriotDB"
+# db_client = MongoClient(f'mongodb://{db_IP}:{db_port}/')
+# db = db_client[db_name]
 
 print("MongoDB接続成功")
 
 print("thingVisorエントリを検索しています...")
-tv_entry = db[thing_visor_collection].find_one({"thingVisorID": thing_visor_ID})
+# tv_entry = db[thing_visor_collection].find_one({"thingVisorID": thing_visor_ID})
+tv_entry = {
+        "thingVisorID": thing_visor_ID,
+        "MQTTDataBroker": {"ip": "192.168.80.240", "port": 30000},
+        "MQTTControlBroker": {"ip": "192.168.80.240", "port": 30000},
+        "params": '{"rate": 5}'
+    }
 print(f"検索結果: {tv_entry}")
 
 valid_tv_entry = False
