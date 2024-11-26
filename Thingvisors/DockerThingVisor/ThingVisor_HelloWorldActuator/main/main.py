@@ -26,63 +26,69 @@ import jsonschema
 from threading import Thread
 from pymongo import MongoClient
 from context import Context
+import grpc
+from concurrent import futures
+import proto.thingvisor_pb2 as thingvisor_pb2
+import proto.thingvisor_pb2_grpc as thingvisor_pb2_grpc
 
 from concurrent.futures import ThreadPoolExecutor
 
-with open('/app/data/entry.json', 'r') as f:
-    data = json.load(f)
+class ThingVisorInitializer:
+    def __init__(self, config_path='/app/data/entry.json'):
+        self.config_path = config_path
+        self.load_config()
+        self.set_mqtt_clients()
+        self.set_thing_attributes()
+        self.set_params()
+        self.executor = ThreadPoolExecutor(1)
+        print("ThingVisorInitializer initialized successfully", flush=True)
 
-thing_visor_collection = data["thing_visor_collection"]
-thing_visor_ID = data["thing_visor_ID"]
-v_thing_ID = thing_visor_ID + "/" + "hello"
-v_thing_label = "helloWorld"
-v_thing_description = "hello world virtual thing"
-v_thing = {"label": v_thing_label,
-           "id": v_thing_ID,
-           "description": v_thing_description}
+    def load_config(self):
+        with open(self.config_path, 'r') as f:
+            self.data = json.load(f)
+        self.thing_visor_collection = self.data["thing_visor_collection"]
+        self.thing_visor_ID = self.data["thing_visor_ID"]
+        self.MQTT_data_broker_IP = self.data["MQTTDataBrokerIP"]
+        self.MQTT_data_broker_port = self.data["MQTTDataBrokerPort"]
+        self.MQTT_control_broker_IP = self.data["MQTTControlBrokerIP"]
+        self.MQTT_control_broker_port = self.data["MQTTControlBrokerPort"]
+        self.tv_control_prefix = self.data["tv_control_prefix"]
+        self.v_thing_prefix = self.data["v_thing_prefix"]
+        self.in_data_suffix = self.data["in_data_suffix"]
+        self.out_data_suffix = self.data["out_data_suffix"]
+        self.in_control_suffix = self.data["in_control_suffix"]
+        self.out_control_suffix = self.data["out_control_suffix"]
+        self.v_silo_prefix = self.data["v_silo_prefix"]
+        self.params = self.data.get("params", {})
+        self.v_thing_topic = "v_thing_prefix" + "/" + self.thing_visor_ID
 
-MQTT_data_broker_IP = data["MQTTDataBrokerIP"]
-MQTT_data_broker_port = data["MQTTDataBrokerPort"]
-MQTT_control_broker_IP = data["MQTTControlBrokerIP"]
-MQTT_control_broker_port = data["MQTTControlBrokerPort"]
-tv_control_prefix = data["tv_control_prefix"]
-v_thing_prefix = data["v_thing_prefix"]
-in_data_suffix = data["in_data_suffix"]
-out_data_suffix = data["out_data_suffix"]
-in_control_suffix = data["in_control_suffix"]
-out_control_suffix = data["out_control_suffix"]
-v_silo_prefix = data["v_silo_prefix"]
+    def set_mqtt_clients(self):
+        self.mqtt_control_client = mqtt.Client()
+        self.mqtt_data_client = mqtt.Client()
+        print("MQTT clients set up successfully", flush=True)
 
-params = data["params"]
+    def set_thing_attributes(self):
+        self.v_thing_name = "Lamp01"
+        self.v_thing_type_attr = "Lamp"
+        self.v_thing_ID = self.thing_visor_ID + "/" + self.v_thing_name
+        self.v_thing_ID_LD = f"urn:ngsi-ld:{self.thing_visor_ID}:{self.v_thing_name}"
+        self.v_thing_label = "helloWorldActuator"
+        self.v_thing_description = "hello world actuator simulating a colored lamp"
+        self.v_thing = {
+            "label": self.v_thing_label,
+            "id": self.v_thing_ID,
+            "description": self.v_thing_description,
+            "type": "actuator"
+        }
+        print("Thing attributes set", flush=True)
 
-thing_visor_ID = os.environ["thingVisorID"]
-v_thing_name = "Lamp01"
-v_thing_type_attr = "Lamp"
-v_thing_ID = thing_visor_ID + "/" + v_thing_name
-v_thing_ID_LD = "urn:ngsi-ld:"+thing_visor_ID+":" + \
-v_thing_name  # ID used in id field od ngsi-ld for data
-v_thing_label = "helloWorldActuator"
-v_thing_description = "hello world actuator simulating a colored lamp"
-v_thing = {"label": v_thing_label,
-            "id": v_thing_ID,
-            "description": v_thing_description,
-            "type": "actuator"}
-commands=[]
-LampActuatorContext = Context()
-contexts = {v_thing_ID: LampActuatorContext}
+    def set_params(self):
+        self.sleep_time = self.params.get("rate", 5)
 
-if params:
-    if 'rate' in params:
-        sleep_time = params['rate']
-    else:
-        sleep_time = 5
-else:
-    sleep_time = 5
-
-mqtt_control_client = mqtt.Client()
-mqtt_data_client = mqtt.Client()
-v_thing_topic = v_thing_prefix + "/" + v_thing_ID
-executor = ThreadPoolExecutor(1)
+    @staticmethod
+    def random_string(string_length=10):
+        letters = string.ascii_lowercase
+        return ''.join(random.choice(letters) for i in range(string_length))
 
 class DataThread(Thread):
     # Class used to:
@@ -114,18 +120,19 @@ class DataThread(Thread):
             self.publish(message)
 
     def send_commandStatus(self, cmd_name, cmd_info, id_LD, status_code):
+        print("ccc", flush=True)
         pname = cmd_name+"-status"
         pvalue = cmd_info.copy()
         pvalue['cmd-status'] = status_code
         ngsiLdEntityStatus = {"id": id_LD,
-                                "type": v_thing_type_attr,
+                                "type": self.v_thing_type_attr,
                                 pname: {"type": "Property", "value": pvalue},
                                 "@context": [ "https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context.jsonld" ]
                                 }
-        data = [ngsiLdEntityStatus]
-                
+        data = [ngsiLdEntityStatus]  
         message = {"data": data, "meta": {
-            "vThingID": v_thing_ID}}  # neutral-format message
+            "vThingID": self.v_thing_ID}}  # neutral-format message
+        print(message, flush=True)
         if "cmd-nuri" in cmd_info:
             if cmd_info['cmd-nuri'].startswith("viriot://"):
                 topic = cmd_info['cmd-nuri'][len("viriot://"):]
@@ -135,7 +142,9 @@ class DataThread(Thread):
         else:
             self.publish(message)
 
+
     def receive_commandRequest(self, cmd_entity):
+        print("bbb", flush=True)
         try:  
             #jsonschema.validate(data, commandRequestSchema)
             id_LD = cmd_entity["id"]
@@ -169,7 +178,7 @@ class DataThread(Thread):
                         "@context": [ "https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context.jsonld" ]
                         }
         data = [ngsiLdEntity]
-        LampActuatorContext.update(data)
+        self.LampActuatorContext.update(data)
         
         # publish changed status
         message = {"data": data, "meta": {
@@ -191,7 +200,7 @@ class DataThread(Thread):
                         "@context": [ "https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context.jsonld" ]
                         }
         data = [ngsiLdEntity]
-        LampActuatorContext.update(data)
+        self.LampActuatorContext.update(data)
         
         # publish changed status
         message = {"data": data, "meta": {
@@ -204,17 +213,20 @@ class DataThread(Thread):
                 self.send_commandResult(cmd_name, cmd_info, id_LD, "OK")
 
     def publish(self, message, topic=""):
+        print("ddd", flush=True)
         msg=json.dumps(message)
+
         if topic == "":
-            out_topic = v_thing_topic + '/' + out_data_suffix
+            out_topic = self.v_thing_topic + '/' + self.out_data_suffix
         else:
             out_topic = topic
         #msg = str(message).replace("\'", "\"")
-        print("Message sent on "+out_topic + "\n" + msg+"\n")
+        print("Message sent on "+out_topic + "\n" + msg+"\n", flush=True)
         # publish data to out_topic
         mqtt_data_client.publish(out_topic, msg)
 
     def on_message_data_in_vThing(self, mosq, obj, msg):
+        print("aaa", flush=True)
         payload = msg.payload.decode("utf-8", "ignore")
         print("Message received on "+msg.topic + "\n" + payload+"\n")
         jres = json.loads(payload.replace("\'", "\""))
@@ -222,8 +234,8 @@ class DataThread(Thread):
             data = jres["data"]
             for entity in data:
                 id_LD = entity["id"]
-                if id_LD != v_thing_ID_LD:
-                    print("Entity not handled by the Thingvisor, message dropped")
+                if id_LD != self.v_thing_ID_LD:
+                    print("Entity not handled by the Thingvisor, message dropped", flush=True)
                     continue
                 for cmd in commands:
                     if cmd in entity:
@@ -234,9 +246,21 @@ class DataThread(Thread):
             traceback.print_exc()
         return
 
-    def __init__(self):
+    def __init__(self, initializer):
         Thread.__init__(self)
-        
+        self.initializer = initializer
+        self.thing_visor_ID = initializer.thing_visor_ID
+        self.v_thing_topic = initializer.v_thing_topic
+        self.in_data_suffix = initializer.in_data_suffix
+        self.out_data_suffix = initializer.out_data_suffix
+        self.MQTT_data_broker_IP = initializer.MQTT_data_broker_IP
+        self.MQTT_data_broker_port = initializer.MQTT_data_broker_port
+        self.in_data_suffix = initializer.in_data_suffix
+        self.LampActuatorContext = Context()
+        self.v_thing_name = "Lamp01"
+        self.v_thing_ID_LD = f"urn:ngsi-ld:{self.thing_visor_ID}:{self.v_thing_name}"
+        self.v_thing_type_attr = "Lamp"
+        self.v_thing_ID = initializer.thing_visor_ID + "/" + self.v_thing_name
 
     def run(self):
         global commands
@@ -246,8 +270,8 @@ class DataThread(Thread):
 
         # Create initial status
         commands = ["set-color","set-luminosity","set-status"]
-        ngsiLdEntity = {"id": v_thing_ID_LD,
-                        "type": v_thing_type_attr,
+        ngsiLdEntity = {"id": self.v_thing_ID_LD,
+                        "type": self.v_thing_type_attr,
                         "status": {"type": "Property", "value": "off"},
                         "color": {"type": "Property", "value": "white"},
                         "luminosity": {"type": "Property", "value": "255"},
@@ -256,126 +280,73 @@ class DataThread(Thread):
         }
 
         data = [ngsiLdEntity]
-        LampActuatorContext.set_all(data)
+        self.LampActuatorContext.set_all(data)
 
-        print("Thread mqtt data started")
-        mqtt_data_client.connect(
-            MQTT_data_broker_IP, MQTT_data_broker_port, 30)
+        print("Thread mqtt data started", flush=True)
+        result = mqtt_data_client.connect(
+            self.MQTT_data_broker_IP, self.MQTT_data_broker_port, 30)
+        print(result, flush=True)
         # define callback and subscriptions for data_in where to receive actuator commands
-        mqtt_data_client.message_callback_add(v_thing_topic + "/" + in_data_suffix,
+        mqtt_data_client.message_callback_add(self.v_thing_topic + "/" + self.in_data_suffix,
                                               self.on_message_data_in_vThing)
         mqtt_data_client.subscribe(
-            v_thing_topic + "/" + in_data_suffix)
+            self.v_thing_topic + "/" + self.in_data_suffix)
         mqtt_data_client.loop_forever()
         print("Thread '" + self.name + "' terminated")
 
-
-class ControlThread(Thread):
-
-    def on_message_get_thing_context(self, jres):
-        silo_id = jres["vSiloID"]
-        message = {"command": "getContextResponse", "data": LampActuatorContext.get_all(), "meta": {
-            "vThingID": v_thing_ID}}
-        mqtt_control_client.publish(v_silo_prefix + "/" + silo_id +
-                                    "/" + in_control_suffix, json.dumps(message))
-
-    def send_destroy_v_thing_message(self):
-        msg = {"command": "deleteVThing",
-               "vThingID": v_thing_ID, "vSiloID": "ALL"}
-        mqtt_control_client.publish(
-            v_thing_prefix + "/" + v_thing_ID + "/" + out_control_suffix, json.dumps(msg))
-        return
-
-    def send_destroy_thing_visor_ack_message(self):
-        msg = {"command": "destroyTVAck", "thingVisorID": thing_visor_ID}
-        mqtt_control_client.publish(
-            tv_control_prefix + "/" + thing_visor_ID + "/" + out_control_suffix, json.dumps(msg))
-        return
-
-    def on_message_destroy_thing_visor(self, jres):
-        global db_client
-        db_client.close()
-        self.send_destroy_v_thing_message()
-        self.send_destroy_thing_visor_ack_message()
-        print("Shutdown completed")
-
-    def on_message_control_in_vThing(self, mosq, obj, msg):
-        payload = msg.payload.decode("utf-8", "ignore")
-        print(msg.topic + " " + str(payload)+"\n")
-        jres = json.loads(payload.replace("\'", "\""))
-        try:
-            command_type = jres["command"]
-            if command_type == "getContextRequest":
-                self.on_message_get_thing_context(jres)
-        except Exception as ex:
-            traceback.print_exc()
-        return
-
-    def on_message_control_in_TV(self, mosq, obj, msg):
-        payload = msg.payload.decode("utf-8", "ignore")
-        print(msg.topic + " " + str(payload)+"\n")
-        jres = json.loads(payload.replace("\'", "\""))
-        try:
-            command_type = jres["command"]
-            if command_type == "destroyTV":
-                self.on_message_destroy_thing_visor(jres)
-        except Exception as ex:
-            traceback.print_exc()
-        return 'invalid command'
-
-        # handler for mqtt control topics
-
+class ThingVisorNotifierServicer(thingvisor_pb2_grpc.ThingVisorNotifierServicer):
     def __init__(self):
-        Thread.__init__(self)
+        self.initialization_complete = False
 
-    def run(self):
-        print("Thread mqtt control started"+"\n")
-        global mqtt_control_client
-        mqtt_control_client.connect(
-            MQTT_control_broker_IP, MQTT_control_broker_port, 30)
+    def NotifyInitializationComplete(self, request, context):
+        print(f"Received notification: {request.message}")
+        self.initialization_complete = True
+        return thingvisor_pb2.InitializationResponse(status="Success")
 
-        # Publish on the thingVisor out_control topic the createVThing command and other parameters
-        v_thing_message = {"command": "createVThing",
-                           "thingVisorID": thing_visor_ID,
-                           "vThing": v_thing}
-        mqtt_control_client.publish(tv_control_prefix + "/" + thing_visor_ID + "/" + out_control_suffix,
-                                    json.dumps(v_thing_message))
+def serve():
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
+    notifier = ThingVisorNotifierServicer()
+    thingvisor_pb2_grpc.add_ThingVisorNotifierServicer_to_server(notifier, server)
+    server.add_insecure_port("0.0.0.0:50051")
+    server.start()
 
-        # Add message callbacks that will only trigger on a specific subscription match
-        mqtt_control_client.message_callback_add(v_thing_topic + "/" + in_control_suffix,
-                                                 self.on_message_control_in_vThing)
-
-        mqtt_control_client.message_callback_add(tv_control_prefix + "/" + thing_visor_ID + "/" + in_control_suffix,
-                                                 self.on_message_control_in_TV)
-        mqtt_control_client.subscribe(
-            v_thing_topic + '/' + in_control_suffix)
-        mqtt_control_client.subscribe(
-            tv_control_prefix + "/" + thing_visor_ID + "/" + in_control_suffix)
-        mqtt_control_client.loop_forever()
-        print("Thread '" + self.name + "' terminated"+"\n")
-
-
-def randomString(stringLength=10):
-    """Generate a random string of fixed length """
-    letters = string.ascii_lowercase
-    return ''.join(random.choice(letters) for i in range(stringLength))
+    print("gRPC server is running...", flush=True)
+    while True:
+        print(f"Initialization status: {notifier.initialization_complete}", flush=True)
+        time.sleep(2)
+        if notifier.initialization_complete:
+            break
+    #server.wait_for_termination()
+    return server, notifier
 
 
 # main
 if __name__ == '__main__':
     mqtt_control_client = mqtt.Client()
     mqtt_data_client = mqtt.Client()
-    
-    data_thread = DataThread()
-    data_thread.start()
 
-    control_thread = ControlThread()  
-    control_thread.start()
+    # gRPCサーバを起動
+    server, notifier = serve()
 
-    while True:
-        try:
-            time.sleep(3)
-        except:
-            print("KeyboardInterrupt"+"\n")
+    try:
+        while not notifier.initialization_complete:
+            print("Waiting for initialization notification...", flush=True)
             time.sleep(1)
-            os._exit(1)
+
+        print("Initialization complete! Starting ThingVisorInitializer...", flush=True)
+        initializer = ThingVisorInitializer()
+
+        data_thread = DataThread(initializer)
+        data_thread.start()
+
+        while True:
+            try:
+                time.sleep(3)
+            except KeyboardInterrupt:
+                print("KeyboardInterrupt")
+                time.sleep(1)
+                os._exit(1)
+
+    except Exception as e:
+        print(f"Error occurred: {e}", flush=True)
+        os._exit(1)

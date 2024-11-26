@@ -1,5 +1,5 @@
 #!/bin/bash
-export thingVisorID=my_thing_visor_id
+export thingVisorID=test
 export systemDatabaseIP=mongo
 export systemDatabasePort=27017
 

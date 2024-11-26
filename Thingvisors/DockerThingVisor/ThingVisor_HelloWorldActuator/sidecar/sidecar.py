@@ -1,95 +1,188 @@
 import os
 import time
 import json
+import traceback
 from pymongo import MongoClient
+from threading import Thread
+import paho.mqtt.client as mqtt
+from context import Context
+import grpc
+import proto.thingvisor_pb2 as thingvisor_pb2
+import proto.thingvisor_pb2_grpc as thingvisor_pb2_grpc
+import time
 
-MAX_RETRY = 3
 
+class ThingVisorConfig:
+    MAX_RETRY = 3
 
-thing_visor_ID = os.environ["thingVisorID"]
-
-# 完全に共通
-tv_control_prefix = "TV"
-v_thing_prefix = "vThing"
-in_data_suffix = "data_in"
-out_data_suffix = "data_out"
-in_control_suffix = "c_in"
-out_control_suffix = "c_out"
-v_silo_prefix = "vSilo"
-thing_visor_collection = "thingVisorC"
-
-# db_IP = os.environ['systemDatabaseIP']
-# db_port = os.environ['systemDatabasePort']
-# db_name = "viriotDB"
-# db_client = MongoClient(f'mongodb://{db_IP}:{db_port}/')
-# db = db_client[db_name]
-
-print("MongoDB接続成功")
-
-print("thingVisorエントリを検索しています...")
-# tv_entry = db[thing_visor_collection].find_one({"thingVisorID": thing_visor_ID})
-tv_entry = {
-        "thingVisorID": thing_visor_ID,
-        "MQTTDataBroker": {"ip": "192.168.80.240", "port": 30000},
-        "MQTTControlBroker": {"ip": "192.168.80.240", "port": 30000},
+    def __init__(self):
+        self.thing_visor_ID = "test"
+        self.tv_control_prefix = "TV"
+        self.v_thing_prefix = "vThing"
+        self.in_data_suffix = "data_in"
+        self.out_data_suffix = "data_out"
+        self.in_control_suffix = "c_in"
+        self.out_control_suffix = "c_out"
+        self.v_silo_prefix = "vSilo"
+        self.thing_visor_collection = "thingVisorC"
+        self.db_IP = os.getenv("systemDatabaseIP")
+        self.db_port = os.getenv("systemDatabasePort")
+        self.db_client = MongoClient('mongodb://'+self.db_IP+':'+str(self.db_port)+'/')
+        # DBからデータを取得するのではなく一旦仮想的な値を用意
+        self.tv_entry = {
+        "thingVisorID": self.thing_visor_ID,
+        "MQTTDataBroker": {"ip": "mqtt", "port": 1883},
+        "MQTTControlBroker": {"ip": "mqtt", "port": 1883},
         "params": '{"rate": 5}'
-    }
-print(f"検索結果: {tv_entry}")
+        }
 
-valid_tv_entry = False
-for x in range(MAX_RETRY):
-    if tv_entry is not None:
-        valid_tv_entry = True
-        break
-    print(f"再試行 {x + 1}/{MAX_RETRY}")
-    time.sleep(3)
-    tv_entry = db[thing_visor_collection].find_one({"thingVisorID": thing_visor_ID})
+    def save_to_file(self, filepath="/app/data/entry.json"):
+        parameters = self.tv_entry["params"]
+        if parameters:
+            params = json.loads(parameters.replace("'", '"'))
+        else:
+            params = parameters
+        data = {
+            "thing_visor_ID": self.thing_visor_ID,
+            "thing_visor_collection": self.thing_visor_collection,
+            "db_IP": self.db_IP,
+            "db_port": self.db_port,
+            "tv_control_prefix": self.tv_control_prefix,
+            "v_thing_prefix": self.v_thing_prefix,
+            "in_data_suffix": self.in_data_suffix,
+            "out_data_suffix": self.out_data_suffix,
+            "in_control_suffix": self.in_control_suffix,
+            "out_control_suffix": self.out_control_suffix,
+            "v_silo_prefix": self.v_silo_prefix,
+            "MQTTDataBrokerIP": self.tv_entry["MQTTDataBroker"]["ip"],
+            "MQTTDataBrokerPort": self.tv_entry["MQTTDataBroker"]["port"],
+            "MQTTControlBrokerIP": self.tv_entry["MQTTControlBroker"]["ip"],
+            "MQTTControlBrokerPort": self.tv_entry["MQTTControlBroker"]["port"],
+            "params": params,
+            "test"  : "aaa"
+        }
+        with open(filepath, 'w') as f:
+            json.dump(data, f)
+        print("初期化完了", flush=True)
 
-if not valid_tv_entry:
-    print(f"エラー: ThingVisorエントリが見つかりません: {thing_visor_ID}")
-    exit()
 
-try:
-    print("データベースからパラメータをインポートしています...")
-    MQTT_data_broker_IP = tv_entry["MQTTDataBroker"]["ip"]
-    MQTT_data_broker_port = int(tv_entry["MQTTDataBroker"]["port"])
-    MQTT_control_broker_IP = tv_entry["MQTTControlBroker"]["ip"]
-    MQTT_control_broker_port = int(tv_entry["MQTTControlBroker"]["port"])
+class ControlThread(Thread):
+    def __init__(self,config):
+        super().__init__()
+        self.config = config
+        self.mqtt_control_client = mqtt.Client()
+        self.v_thing_ID = self.config.thing_visor_ID + "/helloWorld"
+        self.v_thing = {
+            "label": "helloWorld",
+            "id": self.v_thing_ID,
+            "description": "HelloWorldActuator"
+        }
+        self.LampActuatorContext = Context()
+        self.db_client = MongoClient('mongodb://'+self.config.db_IP+':'+str(self.config.db_port)+'/')
+        self.MQTT_control_broker_IP = self.config.tv_entry["MQTTControlBroker"]["ip"]
+        self.MQTT_control_broker_port = self.config.tv_entry["MQTTControlBroker"]["port"]
+        print("Control Thread初期化完了", flush=True)
 
-    parameters = tv_entry["params"]
-    if parameters:
-        params = json.loads(parameters.replace("'", '"'))
-    else:
-        params = parameters
-    print(f"インポートされたパラメータ: {params}")
+    def on_message_get_thing_context(self, jres):
+        print("bbb", flush=True)
+        silo_id = jres["vSiloID"]
+        message = {"command": "getContextResponse", "data": self.LampActuatorContext.get_all(), "meta": {
+            "vThingID": self.v_thing_ID}}
+        print(message, flush=True)
+        self.mqtt_control_client.publish(self.config.v_silo_prefix + "/" + silo_id +
+                                    "/" + self.config.in_control_suffix, json.dumps(message))
 
-except json.decoder.JSONDecodeError:
-    print("パラメータのJSONデコードエラー" + "\n")
-    exit()
-except Exception as e:
-    print(f"エラー: tv_entryにパラメータが見つかりません: {e}")
-    exit()
+    def send_destroy_v_thing_message(self):
+        msg = {"command": "deleteVThing", "vThingID": self.v_thing_ID, "vSiloID": "ALL"}
+        topic = f"{self.config.v_thing_prefix}/{self.v_thing_ID}/{self.config.out_control_suffix}"
+        self.mqtt_control_client.publish(topic, json.dumps(msg))
 
-# 必要なデータを保存
-data = {
-    "thing_visor_ID": thing_visor_ID,
-    "thing_visor_collection": thing_visor_collection,
-    "db_IP": db_IP,
-    "db_port": db_port,
-    "tv_control_prefix": tv_control_prefix,
-    "v_thing_prefix": v_thing_prefix,
-    "in_data_suffix": in_data_suffix,
-    "out_data_suffix": out_data_suffix,
-    "in_control_suffix": in_control_suffix,
-    "out_control_suffix": out_control_suffix,
-    "v_silo_prefix": v_silo_prefix,
-    "MQTTDataBrokerIP": MQTT_data_broker_IP,
-    "MQTTDataBrokerPort": MQTT_data_broker_port,
-    "MQTTControlBrokerIP": MQTT_control_broker_IP,
-    "MQTTControlBrokerPort": MQTT_control_broker_port,
-    "params": params
-}
-with open('/app/data/entry.json', 'w') as f:
-    json.dump(data, f)
+    def send_destroy_thing_visor_ack_message(self):
+        msg = {"command": "destroyTVAck", "thingVisorID": self.config.thing_visor_ID}
+        topic = f"{self.config.tv_control_prefix}/{self.config.thing_visor_ID}/{self.config.out_control_suffix}"
+        self.mqtt_control_client.publish(topic, json.dumps(msg))
+        return
 
-print("初期化完了")
+    def on_message_destroy_thing_visor(self, jres):
+        self.db_client.close()
+        self.send_destroy_v_thing_message()
+        self.send_destroy_thing_visor_ack_message()
+        print("Shutdown completed")
+
+    def on_message_control_in_vThing(self, mosq, obj, msg):
+        print("aaaa", flush=True)
+        payload = msg.payload.decode("utf-8", "ignore")
+        print(msg.topic + " " + str(payload)+"\n")
+        jres = json.loads(payload.replace("\'", "\""))
+        try:
+            command_type = jres["command"]
+            if command_type == "getContextRequest":
+                self.on_message_get_thing_context(jres)
+        except Exception as ex:
+            traceback.print_exc()
+        return
+
+    def on_message_control_in_TV(self, mosq, obj, msg):
+        payload = msg.payload.decode("utf-8", "ignore")
+        print(msg.topic + " " + str(payload)+"\n")
+        jres = json.loads(payload.replace("\'", "\""))
+        try:
+            command_type = jres["command"]
+            if command_type == "destroyTV":
+                self.on_message_destroy_thing_visor(jres)
+        except Exception as ex:
+            traceback.print_exc()
+        return 'invalid command'
+
+    def run(self):
+        print("Thread mqtt control started\n", flush=True)
+        result = self.mqtt_control_client.connect(self.MQTT_control_broker_IP, self.MQTT_control_broker_port, 30) 
+        print(result, flush=True)
+        v_thing_message = {
+            "command": "createVThing",
+            "thingVisorID": self.config.thing_visor_ID,
+            "vThing": self.v_thing
+        }
+        self.mqtt_control_client.publish(
+            f"{self.config.tv_control_prefix}/{self.config.thing_visor_ID}/{self.config.out_control_suffix}",
+            json.dumps(v_thing_message)
+        )
+        
+        self.mqtt_control_client.message_callback_add(
+            f"{self.config.v_thing_prefix}/{self.v_thing_ID}/{self.config.in_control_suffix}",
+            self.on_message_control_in_vThing
+        )
+        # 引数はtopic(一致していたら呼び出される)
+        self.mqtt_control_client.message_callback_add(
+            f"{self.config.tv_control_prefix}/{self.config.thing_visor_ID}/{self.config.in_control_suffix}",
+            self.on_message_control_in_TV
+        )
+        # 引数はtopic
+        self.mqtt_control_client.subscribe(f"{self.config.v_thing_prefix}/{self.v_thing_ID}/{self.config.in_control_suffix}")
+        self.mqtt_control_client.subscribe(f"{self.config.tv_control_prefix}/{self.config.thing_visor_ID}/{self.config.in_control_suffix}")
+        self.mqtt_control_client.loop_forever()
+        print("Thread '" + self.name + "' terminated\n")
+
+class NotifyMain:
+    def __init__(self, host="main", port=50051):
+        time.sleep(5)
+        self.channel = grpc.insecure_channel(f"{host}:{port}")
+        self.stub = thingvisor_pb2_grpc.ThingVisorNotifierStub(self.channel)
+    
+    def notify(self, message="Initialization complete"):
+        try:
+            request = thingvisor_pb2.InitializationRequest(message=message) # .protoで定義したRequest(クライアント側)
+            response = self.stub.NotifyInitializationComplete(request) # .protoで定義したResponse(サーバ側)
+            print(f"Response from main: {response.status}", flush=True)
+        except Exception as e:
+            print(f"Error in notify_main: {e}")
+
+
+if __name__ == '__main__':
+    config_thingvisor = ThingVisorConfig()
+    config_thingvisor.save_to_file()
+    # 初期化完了を main に通知
+    notifier = NotifyMain(host="main", port=50051)
+    notifier.notify()
+    control_thread = ControlThread(config_thingvisor)  
+    control_thread.start()

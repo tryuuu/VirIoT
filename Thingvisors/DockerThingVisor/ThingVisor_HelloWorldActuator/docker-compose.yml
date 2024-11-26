@@ -40,6 +40,8 @@ services:
     container_name: main
     volumes:
       - shared_data:/app/data
+    ports:
+    - "50051:50051"  # gRPC 通信用ポートを公開
     depends_on:
       - mongo
       - mqtt

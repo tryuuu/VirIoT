@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+service ThingVisorNotifier {
+  // 通知を送るRPCメソッド
+  rpc NotifyInitializationComplete(InitializationRequest) returns (InitializationResponse);
+}
+
+message InitializationRequest {
+  string message = 1; // 初期化が完了した旨を伝えるメッセージ
+}
+
+message InitializationResponse {
+  string status = 1; // 成功時のステータス 
+}
