@@ -289,19 +289,26 @@ class DataThread(Thread):
         # define callback and subscriptions for data_in where to receive actuator commands
         mqtt_data_client.message_callback_add(self.v_thing_topic + "/" + self.in_data_suffix,
                                               self.on_message_data_in_vThing)
-        mqtt_data_client.subscribe(
-            self.v_thing_topic + "/" + self.in_data_suffix)
+        # subscribeはsidecarでやるため不要に                                      
+        """mqtt_data_client.subscribe(
+            self.v_thing_topic + "/" + self.in_data_suffix)"""
         mqtt_data_client.loop_forever()
         print("Thread '" + self.name + "' terminated")
 
 class ThingVisorNotifierServicer(thingvisor_pb2_grpc.ThingVisorNotifierServicer):
     def __init__(self):
         self.initialization_complete = False
+        self.received_data = False
 
     def NotifyInitializationComplete(self, request, context):
         print(f"Received notification: {request.message}")
         self.initialization_complete = True
         return thingvisor_pb2.InitializationResponse(status="Success")
+
+    def SendData(self, request, context):
+        print(f"Received data: {request.data}", flush=True)
+        self.received_data = True
+        return thingvisor_pb2.DataResponse(status="Data received successfully")
 
 def serve():
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
@@ -335,6 +342,11 @@ if __name__ == '__main__':
 
         print("Initialization complete! Starting ThingVisorInitializer...", flush=True)
         initializer = ThingVisorInitializer()
+
+        while not notifier.received_data:
+            print("Waiting for data...", flush=True)
+            time.sleep(1)
+        print("Data received! Starting DataThread...", flush=True)
 
         data_thread = DataThread(initializer)
         data_thread.start()

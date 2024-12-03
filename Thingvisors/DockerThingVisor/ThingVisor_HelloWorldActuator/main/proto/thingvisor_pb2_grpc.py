@@ -39,6 +39,11 @@ class ThingVisorNotifierStub(object):
                 request_serializer=thingvisor__pb2.InitializationRequest.SerializeToString,
                 response_deserializer=thingvisor__pb2.InitializationResponse.FromString,
                 _registered_method=True)
+        self.SendData = channel.unary_unary(
+                '/ThingVisorNotifier/SendData',
+                request_serializer=thingvisor__pb2.DataRequest.SerializeToString,
+                response_deserializer=thingvisor__pb2.DataResponse.FromString,
+                _registered_method=True)
 
 
 class ThingVisorNotifierServicer(object):
@@ -51,6 +56,13 @@ class ThingVisorNotifierServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def SendData(self, request, context):
+        """データを送るRPCメソッド
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_ThingVisorNotifierServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -58,6 +70,11 @@ def add_ThingVisorNotifierServicer_to_server(servicer, server):
                     servicer.NotifyInitializationComplete,
                     request_deserializer=thingvisor__pb2.InitializationRequest.FromString,
                     response_serializer=thingvisor__pb2.InitializationResponse.SerializeToString,
+            ),
+            'SendData': grpc.unary_unary_rpc_method_handler(
+                    servicer.SendData,
+                    request_deserializer=thingvisor__pb2.DataRequest.FromString,
+                    response_serializer=thingvisor__pb2.DataResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -87,6 +104,33 @@ class ThingVisorNotifier(object):
             '/ThingVisorNotifier/NotifyInitializationComplete',
             thingvisor__pb2.InitializationRequest.SerializeToString,
             thingvisor__pb2.InitializationResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SendData(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/ThingVisorNotifier/SendData',
+            thingvisor__pb2.DataRequest.SerializeToString,
+            thingvisor__pb2.DataResponse.FromString,
             options,
             channel_credentials,
             insecure,

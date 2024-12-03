@@ -3,6 +3,9 @@ syntax = "proto3";
 service ThingVisorNotifier {
   // 通知を送るRPCメソッド
   rpc NotifyInitializationComplete(InitializationRequest) returns (InitializationResponse);
+
+  // データを送るRPCメソッド
+  rpc SendData(DataRequest) returns (DataResponse);
 }
 
 message InitializationRequest {
@@ -11,4 +14,12 @@ message InitializationRequest {
 
 message InitializationResponse {
   string status = 1; // 成功時のステータス 
+}
+
+message DataRequest {
+  string data = 1; // メインに送るデータ
+}
+
+message DataResponse {
+  string status = 1; // 処理結果のステータス
 }

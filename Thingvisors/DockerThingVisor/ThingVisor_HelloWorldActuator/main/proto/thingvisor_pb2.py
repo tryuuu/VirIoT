@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x10thingvisor.proto\"(\n\x15InitializationRequest\x12\x0f\n\x07message\x18\x01 \x01(\t\"(\n\x16InitializationResponse\x12\x0e\n\x06status\x18\x01 \x01(\t2e\n\x12ThingVisorNotifier\x12O\n\x1cNotifyInitializationComplete\x12\x16.InitializationRequest\x1a\x17.InitializationResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x10thingvisor.proto\"(\n\x15InitializationRequest\x12\x0f\n\x07message\x18\x01 \x01(\t\"(\n\x16InitializationResponse\x12\x0e\n\x06status\x18\x01 \x01(\t\"\x1b\n\x0b\x44\x61taRequest\x12\x0c\n\x04\x64\x61ta\x18\x01 \x01(\t\"\x1e\n\x0c\x44\x61taResponse\x12\x0e\n\x06status\x18\x01 \x01(\t2\x8e\x01\n\x12ThingVisorNotifier\x12O\n\x1cNotifyInitializationComplete\x12\x16.InitializationRequest\x1a\x17.InitializationResponse\x12\'\n\x08SendData\x12\x0c.DataRequest\x1a\r.DataResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -35,6 +35,10 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_INITIALIZATIONREQUEST']._serialized_end=60
   _globals['_INITIALIZATIONRESPONSE']._serialized_start=62
   _globals['_INITIALIZATIONRESPONSE']._serialized_end=102
-  _globals['_THINGVISORNOTIFIER']._serialized_start=104
-  _globals['_THINGVISORNOTIFIER']._serialized_end=205
+  _globals['_DATAREQUEST']._serialized_start=104
+  _globals['_DATAREQUEST']._serialized_end=131
+  _globals['_DATARESPONSE']._serialized_start=133
+  _globals['_DATARESPONSE']._serialized_end=163
+  _globals['_THINGVISORNOTIFIER']._serialized_start=166
+  _globals['_THINGVISORNOTIFIER']._serialized_end=308
 # @@protoc_insertion_point(module_scope)

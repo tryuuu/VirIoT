@@ -81,6 +81,7 @@ class ControlThread(Thread):
         self.db_client = MongoClient('mongodb://'+self.config.db_IP+':'+str(self.config.db_port)+'/')
         self.MQTT_control_broker_IP = self.config.tv_entry["MQTTControlBroker"]["ip"]
         self.MQTT_control_broker_port = self.config.tv_entry["MQTTControlBroker"]["port"]
+        self.notifier = NotifyMain(host="main", port=50051)
         print("Control Thread初期化完了", flush=True)
 
     def on_message_get_thing_context(self, jres):
@@ -112,8 +113,12 @@ class ControlThread(Thread):
     def on_message_control_in_vThing(self, mosq, obj, msg):
         print("aaaa", flush=True)
         payload = msg.payload.decode("utf-8", "ignore")
-        print(msg.topic + " " + str(payload)+"\n")
         jres = json.loads(payload.replace("\'", "\""))
+        print(jres, flush=True)
+        # dataというkeyがある場合
+        if "data" in jres:
+            self.call_datathread_grpc(jres)
+            return
         try:
             command_type = jres["command"]
             if command_type == "getContextRequest":
@@ -123,6 +128,7 @@ class ControlThread(Thread):
         return
 
     def on_message_control_in_TV(self, mosq, obj, msg):
+        print("ccc", flush=True)
         payload = msg.payload.decode("utf-8", "ignore")
         print(msg.topic + " " + str(payload)+"\n")
         jres = json.loads(payload.replace("\'", "\""))
@@ -133,6 +139,14 @@ class ControlThread(Thread):
         except Exception as ex:
             traceback.print_exc()
         return 'invalid command'
+    
+    # gRPCでmainにデータを送信
+    def call_datathread_grpc(self, data):
+        try:
+            self.notifier.send_data(data=json.dumps(data))
+        except Exception as ex:
+            print(f"Error in call_datathread_grpc: {ex}")
+
 
     def run(self):
         print("Thread mqtt control started\n", flush=True)
@@ -157,9 +171,17 @@ class ControlThread(Thread):
             f"{self.config.tv_control_prefix}/{self.config.thing_visor_ID}/{self.config.in_control_suffix}",
             self.on_message_control_in_TV
         )
+        # mainに渡す(同様にしてsubscribeしておく)
+        v_thing_topic = "v_thing_prefix/" + self.config.thing_visor_ID
+        self.mqtt_control_client.message_callback_add(
+            f"{v_thing_topic}/{self.config.in_data_suffix}",
+            self.on_message_control_in_vThing
+        )
         # 引数はtopic
         self.mqtt_control_client.subscribe(f"{self.config.v_thing_prefix}/{self.v_thing_ID}/{self.config.in_control_suffix}")
         self.mqtt_control_client.subscribe(f"{self.config.tv_control_prefix}/{self.config.thing_visor_ID}/{self.config.in_control_suffix}")
+        self.mqtt_control_client.subscribe(f"{v_thing_topic}/{self.config.in_data_suffix}")
+
         self.mqtt_control_client.loop_forever()
         print("Thread '" + self.name + "' terminated\n")
 
@@ -176,6 +198,15 @@ class NotifyMain:
             print(f"Response from main: {response.status}", flush=True)
         except Exception as e:
             print(f"Error in notify_main: {e}")
+
+    def send_data(self, data):
+        try:
+            print("sending data to main..", flush=True)
+            request = thingvisor_pb2.DataRequest(data=data)
+            response = self.stub.SendData(request)
+            print(f"Response from main: {response.status}", flush=True)
+        except Exception as e:
+            print(f"Error in send_data: {e}", flush=True)
 
 
 if __name__ == '__main__':
