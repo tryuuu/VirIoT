@@ -308,6 +308,15 @@ class ThingVisorNotifierServicer(thingvisor_pb2_grpc.ThingVisorNotifierServicer)
     def SendData(self, request, context):
         print(f"Received data: {request.data}", flush=True)
         self.received_data = True
+        # MQTT メッセージ形式を模倣
+        class DummyMessage:
+            def __init__(self, payload, topic):
+                self.payload = payload
+                self.topic = topic
+        message = DummyMessage(payload=request.data.encode('utf-8'), topic="gRPC/SendData")
+        initializer = ThingVisorInitializer()
+        data_thread = DataThread(initializer)
+        data_thread.on_message_data_in_vThing(None, None, message)
         return thingvisor_pb2.DataResponse(status="Data received successfully")
 
 def serve():
