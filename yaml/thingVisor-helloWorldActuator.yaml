@@ -16,7 +16,7 @@ spec:
     spec:
       initContainers:
       - name: init-sidecar
-        image: tryuu/thingvisor_helloworld_actuator_sidecar:hello
+        image: tryuu/thingvisor_helloworld_actuator_sidecar:latest
         imagePullPolicy: Always
         volumeMounts:
         - name: shared-data
@@ -24,14 +24,14 @@ spec:
 
       containers:
       - name: main
-        image: tryuu/thingvisor_helloworld_actuator_main:hello
+        image: tryuu/thingvisor_helloworld_actuator_main:latest
         imagePullPolicy: Always
         volumeMounts:
         - name: shared-data
           mountPath: /app/data
       
       - name: sidecar-container
-        image: tryuu/thingvisor_helloworld_actuator_sidecar:hello
+        image: tryuu/thingvisor_helloworld_actuator_sidecar:latest
         imagePullPolicy: Always
         volumeMounts:
         - name: shared-data
