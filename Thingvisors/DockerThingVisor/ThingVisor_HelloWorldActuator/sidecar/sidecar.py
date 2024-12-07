@@ -186,7 +186,7 @@ class ControlThread(Thread):
         print("Thread '" + self.name + "' terminated\n")
 
 class NotifyMain:
-    def __init__(self, host="main", port=50051):
+    def __init__(self, host="localhost", port=50051):
         time.sleep(5)
         self.channel = grpc.insecure_channel(f"{host}:{port}")
         self.stub = thingvisor_pb2_grpc.ThingVisorNotifierStub(self.channel)
@@ -213,7 +213,7 @@ if __name__ == '__main__':
     config_thingvisor = ThingVisorConfig()
     config_thingvisor.save_to_file()
     # 初期化完了を main に通知
-    notifier = NotifyMain(host="main", port=50051)
+    notifier = NotifyMain(host="localhost", port=50051)
     notifier.notify()
     control_thread = ControlThread(config_thingvisor)  
     control_thread.start()
